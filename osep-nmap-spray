@@ -1,0 +1,33 @@
+#!/bin/bash
+
+if [ "$EUID" -ne 0 ]; then
+  printf '%s\n' 'error: scan needs root privilege'
+  printf '%s\n' 'usage: '"$0"' <IP address> [IP address [IP ...]]'
+  exit 0
+fi
+
+# change this!
+basedir='/home/kali/gitlab/osep/exam'
+
+if [ "$#" -eq 0 ]; then
+  printf '%s\n' 'usage: '"$0"' <IP address> [IP address [IP ...]]'
+  exit 0
+fi
+
+com[0]='nmap "$ip" --top-ports 1000 -v2 -Pn -sS --open -oN "$nmapdir"/nmap-sS-top1000-"$(date | tr '"'"' '"'"' '"'"'-'"'"')".txt'
+com[1]='nmap "$ip" --top-ports 30 -v2 -Pn -sU --open -oN "$nmapdir"/nmap-sU-top30-"$(date | tr '"'"' '"'"' '"'"'-'"'"')".txt'
+com[2]='tcpopens="$(cat "$nmapdir"/nmap-sS*.txt | grep -oE '"'"'^[0-9]+'"'"' | sort -un | tr '"'"'\n'"'"' '"'"','"'"' | sed '"'"'s/,$//'"'"')"'
+com[3]='nmap "$ip" -p"$tcpopens" -v2 -Pn -sS --open -sV -oN "$nmapdir"/nmap-last-sV-"$(date | tr '"'"' '"'"' '"'"'-'"'"')".txt'
+com[4]='nmap "$ip" -p"$tcpopens" -v2 -Pn -sS --open -A -oN "$nmapdir"/nmap-last-A-"$(date | tr '"'"' '"'"' '"'"'-'"'"')".txt'
+
+for ip in "$@"; do
+  mkdir -p "$basedir"'/'"$ip"'/nmap'
+done
+
+for command in "${com[@]}"; do
+  for ip in "$@"; do
+    nmapdir="$basedir"'/'"$ip"'/nmap'
+    eval echo sudo "$(echo $command)"
+    eval "$command"
+  done
+done
