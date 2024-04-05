@@ -8,6 +8,9 @@ function EnumerationLocal {
     Write-Host '[*] Computer Name'
     Write-Host $env:COMPUTERNAME
 
+    Write-Host '[*] Computer Shares'
+    net share
+
     Write-Host '[*] App Locker Rules'
     Get-AppLockerPolicy -Effective | Select-Object -ExpandProperty RuleCollections | Format-List
 

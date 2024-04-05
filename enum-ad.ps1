@@ -167,12 +167,13 @@ ForEach ($domain in $domains) {
     Write-Host "[*] Members belonging to Enterprise Admins (${domain})"
     $container.EnterpriseAdmins | Select-Object MemberName | Format-Table
     Write-Host "[*] Groups (${domain})"
-    $groupObjects = $container.DomainGroup | Where-Object { -Not ($_.GroupType -Match 'CREATED_BY_SYSTEM') } | Select-Object MemberOf, SamAccountName, Member
+    $groupObjects = $container.DomainGroup | Where-Object { -Not ($_.GroupType -Match 'CREATED_BY_SYSTEM') } | Select-Object MemberOf, SamAccountName, Member, ObjectSID
     $groupObjects | Select-Object SamAccountName | Format-Table
     Write-Host "[*] Potentially interesting Groups (${domain})"
     $groups = @()
     $groupsMemberOfs = @()
     $groupsMembers = @()
+    $groupsRID1000s = @()
     ForEach ($currentGroup in $groupObjects) {
         $group = $currentGroup | Select-Object -ExpandProperty SamAccountName
         if ($wellKnownDomainGroups -Contains $group -Or $wellKnownLocalGroups -Contains $group) {
@@ -189,6 +190,11 @@ ForEach ($domain in $domains) {
         if ($members -Ne $null) {
             $groupsMembers += ReturnGroupMembers $group $members
         }
+        $rid = $currentGroup | Select-Object ObjectSID
+        if ($rid -Match 'S-1-5-21-[0-9]+-[0-9]+-' -And [Int]($_.ObjectSID -split '-' | Select-Object -Last 1) -Ge 1000) {
+            $temp | Add-Member NoteProperty 'ObjectSID'
+            $groupsRID1000s += $temp
+        }
     }
     if ($groups -Ne @()) {
         $groups | Format-Table
@@ -200,6 +206,10 @@ ForEach ($domain in $domains) {
     Write-Host "[*] Potentially interesting Groups members (${domain})"
     if ($groupsMembers -Ne @()) {
         $groupsMembers | Format-Table
+    }
+    Write-Host "[*] Groups having RID greater than or equal to 1000 (${domain})"
+    if ($groupsRID1000s -Ne @()) {
+        $groupsRID1000s | Format-Table
     }
     Write-Host "[*] Computers (${domain})"
     $container.DomainComputer | Select-Object DnsHostName | Foreach-Object { $_ | Add-Member -NotePropertyName ipaddress -NotePropertyValue (Resolve-DnsName -Name ($_.dnshostname) | Select-Object -ExpandProperty IPAddress | Where-Object { $_ -Ne '::1' }) -Force; $_ } | Format-Table IPAddress, dnshostname
@@ -228,34 +238,32 @@ ForEach ($domain in $domains) {
     ForEach ($attackers in $objects) {
         ForEach ($targets in $objects) {
             Write-Host "[*] List of ${attackers} that have abilities against ${targets} (${domain})"
-            $result = $container.EnumWritable($attackers, $targets) | Select-Object Identity -Unique
-            $result | Format-Table
+            $currents = $container.EnumWritable($attackers, $targets)
+            $currents | Select-Object Identity -Unique | Format-Table
 
             if ($attackers -Eq 'Users') {
-                ForEach ($user in $result.Identity) {
+                ForEach ($user in $currents.Identity) {
                     if ($wellKnownUsers -Contains $user) {
                         Continue
                     }
                     Write-Host "[+] The user `"${user}`" has ability against ${targets}! (${domain})"
-                    $currents = $container.EnumWritable($attackers, $targets) | Where-Object { $_.Identity -Eq $user }
-                    PrintAbilities $currents
+                    PrintAbilities ($currents | Where-Object { $_.Identity -Eq $user })
                 }
             }
             if ($attackers -Eq 'Groups') {
-                ForEach ($group in $result.Identity) {
+                ForEach ($group in $currents.Identity) {
                     if ($wellKnownLocalGroups -Contains $group -Or $wellKnownDomainGroups -Contains $group) {
                         Continue
                     }
                     Write-Host "[+] The group `"${group}`" has ability against ${targets}! (${domain})"
-                    $currents = $container.EnumWritable($attackers, $targets) | Where-Object { $_.Identity -Eq $group }
-                    PrintAbilities $currents
+                    PrintAbilities ($currents | Where-Object { $_.Identity -Eq $group })
 
                     $memberOfs = $container.DomainGroup | Where-Object { $_.SamAccountName -Eq $group } | Select-Object -ExpandProperty MemberOf -ErrorAction SilentlyContinue
-                    $members = $container.DomainGroup | Where-Object { $_.SamAccountName -Eq $group } | Select-Object -ExpandProperty Member -ErrorAction SilentlyContinue
                     Write-Host "[+] The parents of the `"${group}`" group (${domain})"
                     if ($memberOfs -Ne $null) {
                         ReturnGroupMemberOfs $group $memberOfs | Format-Table
                     }
+                    $members = $container.DomainGroup | Where-Object { $_.SamAccountName -Eq $group } | Select-Object -ExpandProperty Member -ErrorAction SilentlyContinue
                     Write-Host "[+] The members of the `"${group}`" group (${domain})"
                     if ($members -Ne $null) {
                         ReturnGroupMembers $group $members | Format-Table
@@ -263,9 +271,9 @@ ForEach ($domain in $domains) {
                 }
             }
             if ($attackers -Eq 'Computers') {
-                ForEach ($computer in $result.Identity) {
+                ForEach ($computer in $currents.Identity) {
                     Write-Host "[+] The computer `"${computer}`" has ability against ${targets}! (${domain})"
-                    PrintAbilities $currents
+                    PrintAbilities ($currents | Where-Object { $_.Identity -Eq $computer })
                 }
             }
         }
