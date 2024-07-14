@@ -283,7 +283,7 @@ function SQLQuery {
 function MSSQLConnection {
     param(
         [Parameter(Position = 0, Mandatory = $True)] [string]$sqlServer,
-        [Parameter(Position = 1, Mandatory = $True)] [string]$database,
+        [Parameter(Position = 1, Mandatory = $False)] [string]$database = "master",
         [Parameter(Position = 2, Mandatory = $False)] $username = $null,
         [Parameter(Position = 3, Mandatory = $False)] $password = $null
     )

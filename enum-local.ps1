@@ -36,7 +36,11 @@ function EnumerationLocal {
     }
 
     Write-Host '[*] Running Processes'
-    Get-Process | Select-Object Id, ProcessName, Description, Path | Format-Table
+    try {
+        Get-Process -IncludeUserName -ErrorAction Stop | Select-Object Id, ProcessName, UserName, Description, Path | Format-Table
+    } catch {
+        Get-Process | Select-Object Id, ProcessName, Description, Path | Format-Table
+    }
 
     Write-Host '[*] TCP Listening IPv4 Ports'
     $tcpOpens = Get-NetTCPConnection -State Listen | Where-Object { $_.RemoteAddress -ne '::' } | Select-Object LocalAddress, LocalPort, OwningProcess | Sort-Object -Property LocalPort
